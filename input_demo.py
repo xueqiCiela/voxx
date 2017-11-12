@@ -289,12 +289,21 @@ class GraphDisplay(InstructionGroup):
 
         self.line.points = self.points.tolist()
 
-# snap = { 0: 0, 1: 0, 2: 2, 3: 4, 4: 4, 5: 4, 6: 7, 7: 7, 8: 7, 9: 9, 10: 12, 11: 12 }
-snap = { 0: 0, 1: 0, 2: 0, 3: 4, 4: 4, 5: 4, 6: 7, 7: 7, 8: 7, 9: 7, 10: 12, 11: 12 }
+snap = (0, 2, 4, 5, 7, 9, 11, 12)
+# snap = (0, 2, 4, 7, 9, 12)
+# snap = (0, 4, 7, 12)
 
 def snap_to_chord(pitch):
+    if pitch == 0: return 0
     pitch = int(round(pitch))
-    return 12 * (pitch // 12) + snap[pitch % 12]
+    octave = 12 * (pitch // 12)
+    return octave + min(snap, key=lambda x: abs(x - (pitch - octave)))
+
+def snap_to_chord_near(anchor, pitch):
+    if pitch == 0: return 0
+    while pitch > anchor + 10: pitch -= 12
+    while pitch < anchor - 10: pitch += 12
+    return snap_to_chord(pitch)
 
 class MainWidget1(BaseWidget) :
     def __init__(self):
@@ -307,6 +316,7 @@ class MainWidget1(BaseWidget) :
 
         self.synth = Synth('FluidR3_GM.sf2')
         self.synth_note = 0
+        self.last_note = 60 # always nonzero, user's note won't be too far away
         self.mixer.add(self.synth)
 
         self.note_votes = Counter()
@@ -362,6 +372,7 @@ class MainWidget1(BaseWidget) :
                 self.synth.noteoff(CHANNEL, int(self.synth_note))
                 self.synth_note = maj_note
                 if self.synth_note != 0:
+                    self.last_note = self.synth_note
                     self.synth.noteon(CHANNEL, int(self.synth_note), 100)
             self.note_votes = Counter()
 
@@ -402,7 +413,7 @@ class MainWidget1(BaseWidget) :
         self.pitch_meter.set(self.cur_pitch)
         self.pitch_graph.add_point(self.cur_pitch)
 
-        cur_note = snap_to_chord(int(round(self.cur_pitch)))
+        cur_note = snap_to_chord_near(self.last_note, int(round(self.cur_pitch)))
         self.note_votes[cur_note] += len(frames)
         # print(cur_note)
         # cur_note = 60
