@@ -64,13 +64,15 @@ def chord_generater(chords, key, rhythm):
 	top_dur_pitch =  []
 	middle_dur_pitch =  []
 	root_dur_pitch =  []
+	which = []
 	for x in range(len(top_line)):
 		for note in one_measure:
 			top_dur_pitch.append([note, top_line[x]])
 			middle_dur_pitch.append([note, mid_line[x]])
 			root_dur_pitch.append([note, root_line[x]])
+			which.append([note, top_line[x], mid_line[x], root_line[x]])
 
-	return [top_dur_pitch, middle_dur_pitch, root_dur_pitch]
+	return [top_dur_pitch, middle_dur_pitch, root_dur_pitch, which]
 
 
 
