@@ -21,6 +21,7 @@ from common.writer import *
 from common.mixer import *
 from common.gfxutil import *
 from common.wavegen import *
+from common.synth import *
 from buffers import *
 
 from kivy.graphics.instructions import InstructionGroup
@@ -60,7 +61,8 @@ class PitchDetector(object):
         # keep only the highest confidence estimate of the pitches found.
         while self.buffer.get_read_available() > self.buffer_size:
             p, c = self._process_window(self.buffer.read(self.buffer_size))
-            if c > conf:
+            if c >= conf:
+                conf = c
                 self.cur_pitch = p
         return self.cur_pitch
 
@@ -294,6 +296,11 @@ class MainWidget1(BaseWidget) :
         self.audio.set_generator(self.mixer)
         self.io_buffer = IOBuffer()
         self.mixer.add(self.io_buffer)
+
+        self.synth = Synth('FluidR3_GM.sf2')
+        self.synth_note = 0
+        self.mixer.add(self.synth)
+
         self.onset_detector = OnsetDectior(self.on_onset)
         self.pitch = PitchDetector()
 
@@ -361,6 +368,14 @@ class MainWidget1(BaseWidget) :
         self.cur_pitch = self.pitch.write(mono)
         self.pitch_meter.set(self.cur_pitch)
         self.pitch_graph.add_point(self.cur_pitch)
+
+        CHANNEL = 0 # TODO
+        cur_note = int(round(self.cur_pitch))
+        # cur_note = 60
+        if cur_note != self.synth_note:
+            self.synth.noteoff(CHANNEL, int(self.synth_note))
+            self.synth_note = cur_note
+            self.synth.noteon(CHANNEL, int(self.synth_note), 100)
 
         # onset detection and classification
         self.onset_detector.write(mono)
