@@ -21,8 +21,12 @@ from common.writer import *
 from common.mixer import *
 from common.gfxutil import *
 from common.wavegen import *
+from common.clock import *
+from common.metro import *
 from common.synth import *
 from buffers import *
+
+from collections import Counter
 
 from kivy.graphics.instructions import InstructionGroup
 from kivy.graphics import Color, Ellipse, Rectangle, Line
@@ -285,7 +289,12 @@ class GraphDisplay(InstructionGroup):
 
         self.line.points = self.points.tolist()
 
+# snap = { 0: 0, 1: 0, 2: 2, 3: 4, 4: 4, 5: 4, 6: 7, 7: 7, 8: 7, 9: 9, 10: 12, 11: 12 }
+snap = { 0: 0, 1: 0, 2: 0, 3: 4, 4: 4, 5: 4, 6: 7, 7: 7, 8: 7, 9: 7, 10: 12, 11: 12 }
 
+def snap_to_chord(pitch):
+    pitch = int(round(pitch))
+    return 12 * (pitch // 12) + snap[pitch % 12]
 
 class MainWidget1(BaseWidget) :
     def __init__(self):
@@ -293,13 +302,14 @@ class MainWidget1(BaseWidget) :
 
         self.audio = Audio(NUM_CHANNELS, input_func=self.receive_audio)
         self.mixer = Mixer()
-        self.audio.set_generator(self.mixer)
         self.io_buffer = IOBuffer()
         self.mixer.add(self.io_buffer)
 
         self.synth = Synth('FluidR3_GM.sf2')
         self.synth_note = 0
         self.mixer.add(self.synth)
+
+        self.note_votes = Counter()
 
         self.onset_detector = OnsetDectior(self.on_onset)
         self.pitch = PitchDetector()
@@ -333,6 +343,29 @@ class MainWidget1(BaseWidget) :
 
         self.recording_idx = 0
 
+        self.tempo_map  = SimpleTempoMap(120)
+        self.sched = AudioScheduler(self.tempo_map)
+        self.mixer.add(self.sched)
+
+        self.audio.set_generator(self.mixer)
+        self.next_note(self.sched.get_tick(), None)
+
+    def next_note(self, tick, msg):
+        print('next note')
+        if self.note_votes:
+            maj_note = max(self.note_votes.items(), key=lambda x: x[1])[0]
+            print('=' * 100)
+            print('MAJ NOTE', maj_note)
+            print('=' * 100)
+            if maj_note != self.synth_note:
+                CHANNEL = 0
+                self.synth.noteoff(CHANNEL, int(self.synth_note))
+                self.synth_note = maj_note
+                if self.synth_note != 0:
+                    self.synth.noteon(CHANNEL, int(self.synth_note), 100)
+            self.note_votes = Counter()
+
+        self.sched.post_at_tick(tick + 80, self.next_note, msg)
     def on_update(self) :
         self.audio.on_update()
         self.anim_group.on_update()
@@ -369,13 +402,10 @@ class MainWidget1(BaseWidget) :
         self.pitch_meter.set(self.cur_pitch)
         self.pitch_graph.add_point(self.cur_pitch)
 
-        CHANNEL = 0 # TODO
-        cur_note = int(round(self.cur_pitch))
+        cur_note = snap_to_chord(int(round(self.cur_pitch)))
+        self.note_votes[cur_note] += len(frames)
+        # print(cur_note)
         # cur_note = 60
-        if cur_note != self.synth_note:
-            self.synth.noteoff(CHANNEL, int(self.synth_note))
-            self.synth_note = cur_note
-            self.synth.noteon(CHANNEL, int(self.synth_note), 100)
 
         # onset detection and classification
         self.onset_detector.write(mono)
